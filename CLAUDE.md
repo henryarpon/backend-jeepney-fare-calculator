@@ -53,6 +53,13 @@ Domain never references any other project. Never reference Infrastructure from A
 - The connection string is `ConnectionStrings:DefaultConnection` in user-secrets (Api project). First-time setup, from `back-end/`:
   `dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=(localdb)\MSSQLLocalDB;Database=JeepneyFareCalculator;Trusted_Connection=True;TrustServerCertificate=True" --project src/JeepneyFareCalculator.Api`
   then apply migrations to create the database. `GET /api/health` returns 503 until the database exists.
+- The one Administrator signs in with `Administrator:Username` and `Administrator:PasswordHash` from user-secrets (Api project). Until both are set, `POST /api/admin/login` returns 500. First-time setup, or to change the password, from `back-end/`:
+  1. `dotnet run --project src/JeepneyFareCalculator.Api --no-launch-profile -- hash-password`, then type the password twice (it isn't shown). It prints a hash like `PBKDF2-SHA256.600000.<salt>.<key>`.
+  2. `dotnet user-secrets set "Administrator:Username" "<username>" --project src/JeepneyFareCalculator.Api`
+  3. `dotnet user-secrets set "Administrator:PasswordHash" "<hash from step 1>" --project src/JeepneyFareCalculator.Api`
+  Only the hash is stored, never the password. Restart the API after changing them.
+- Admin sessions are kept in memory (`Api/Authentication/InMemoryTicketStore`), so restarting the API signs the Administrator out. A session ends after 2 hours without a request.
+- Admin endpoints need `[Authorize]` on their controller. Integration tests sign in with `factory.CreateSignedInClientAsync()`, which goes through the real login endpoint over https (the cookie is Secure).
 - Integration tests need LocalDB (`(localdb)\MSSQLLocalDB`). Each test run creates a database named `JeepneyFareCalculator_Tests_<guid>` and drops it at the end. If a run is killed, delete leftovers in SQL Server Object Explorer.
 - Integration test classes must have `[Collection(ApiCollection.Name)]` so they share one `ApiFactory` and one database. Tests in that collection run one at a time.
 - The `FakeDistanceEstimator` is shared too: a test that depends on the estimated distance must set `factory.DistanceEstimator.NextEstimate` itself, never rely on what an earlier test left there.
