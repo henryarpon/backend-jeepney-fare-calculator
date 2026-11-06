@@ -34,6 +34,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<PreviewFareMatrix>();
 builder.Services.AddScoped<UploadFareMatrix>();
 builder.Services.AddScoped<ListFareMatrixVersions>();
+builder.Services.AddScoped<GetFareMatrixVersion>();
+builder.Services.AddScoped<ActivateFareMatrixVersion>();
 
 var app = builder.Build();
 
