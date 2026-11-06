@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace JeepneyFareCalculator.Api.Controllers;
 
-/// <summary>Previews, uploads and lists Fare Matrix Versions for the Administrator. Every action needs a signed-in session.</summary>
+/// <summary>Previews, uploads, lists, shows and reactivates Fare Matrix Versions for the Administrator. Every action needs a signed-in session.</summary>
 [ApiController]
 [Route("api/admin/fare-matrices")]
 [Authorize]
@@ -14,6 +14,8 @@ public sealed class FareMatricesController(
     PreviewFareMatrix previewFareMatrix,
     UploadFareMatrix uploadFareMatrix,
     ListFareMatrixVersions listFareMatrixVersions,
+    GetFareMatrixVersion getFareMatrixVersion,
+    ActivateFareMatrixVersion activateFareMatrixVersion,
     ILogger<FareMatricesController> logger) : ControllerBase
 {
     /// <summary>
@@ -56,5 +58,33 @@ public sealed class FareMatricesController(
         CancellationToken cancellationToken)
     {
         return await listFareMatrixVersions.ListAsync(vehicleType!.Value, cancellationToken);
+    }
+
+    /// <summary>Returns one Fare Matrix Version with its rows, or 404 when there is none with this id.</summary>
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<FareMatrixVersionDetails>> GetAsync(int id, CancellationToken cancellationToken)
+    {
+        var version = await getFareMatrixVersion.GetAsync(id, cancellationToken);
+        return version is null ? NotFound() : version;
+    }
+
+    /// <summary>
+    /// Makes a Fare Matrix Version the Active Fare Matrix for its vehicle type again,
+    /// e.g. to undo a bad upload, and returns it. Activating the version that is
+    /// already active changes nothing. 404 when there is no version with this id.
+    /// </summary>
+    [HttpPost("{id:int}/activate")]
+    public async Task<ActionResult<FareMatrixVersionSummary>> ActivateAsync(int id, CancellationToken cancellationToken)
+    {
+        var version = await activateFareMatrixVersion.ActivateAsync(id, cancellationToken);
+        if (version is null)
+        {
+            return NotFound();
+        }
+
+        logger.LogInformation(
+            "Fare Matrix Version {VersionId} is now the active version for {VehicleType}.",
+            version.Id, version.VehicleType);
+        return version;
     }
 }

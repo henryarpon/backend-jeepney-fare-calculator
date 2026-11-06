@@ -19,4 +19,15 @@ public interface IFareMatrixStore
     Task<IReadOnlyList<FareMatrixVersionSummary>> ListVersionsAsync(
         VehicleType vehicleType,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Makes the version the Active Fare Matrix for its vehicle type and deactivates
+    /// that vehicle type's other active version, all in one transaction. A version
+    /// that is already active is left as it is.
+    /// </summary>
+    /// <returns>The version, now active, or <c>null</c> when no version has this id.</returns>
+    Task<FareMatrixVersionSummary?> ActivateAsync(int id, CancellationToken cancellationToken);
+
+    /// <summary>One version with its rows in distance order, or <c>null</c> when no version has this id.</summary>
+    Task<FareMatrixVersionDetails?> GetVersionAsync(int id, CancellationToken cancellationToken);
 }

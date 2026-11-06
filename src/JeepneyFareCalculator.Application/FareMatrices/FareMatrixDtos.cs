@@ -22,3 +22,12 @@ public sealed record FareMatrixVersionSummary(
     string? Note,
     bool IsActive,
     int RowCount);
+
+/// <summary>Body of <c>GET /api/admin/fare-matrices/{id}</c>: one Fare Matrix Version with its rows.</summary>
+public sealed record FareMatrixVersionDetails(
+    int Id,
+    VehicleType VehicleType,
+    DateTimeOffset UploadedAt,
+    string? Note,
+    bool IsActive,
+    IReadOnlyList<FareMatrixRowDto> Rows);
