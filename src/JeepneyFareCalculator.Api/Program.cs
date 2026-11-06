@@ -22,6 +22,9 @@ builder.Services.AddOpenApi();
 // and empty error responses (e.g. 404) are all written as ProblemDetails.
 builder.Services.AddProblemDetails();
 
+// A rejected fare matrix file is answered with 400 and its errors, not 500.
+builder.Services.AddExceptionHandler<InvalidFareMatrixFileHandler>();
+
 builder.Services.AddInfrastructure();
 builder.Services.AddAdminAuthentication();
 
