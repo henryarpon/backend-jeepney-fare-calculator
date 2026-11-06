@@ -1,5 +1,7 @@
 using JeepneyFareCalculator.Api;
+using System.Text.Json.Serialization;
 using JeepneyFareCalculator.Api.Authentication;
+using JeepneyFareCalculator.Application.FareMatrices;
 using JeepneyFareCalculator.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
@@ -11,7 +13,9 @@ if (args is [HashPasswordCommand.Name])
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+// Enums such as VehicleType are read and written by name ("TraditionalJeepney"), never as numbers.
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddOpenApi();
 
 // ProblemDetails is the single error response format: unhandled exceptions
@@ -20,6 +24,13 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddInfrastructure();
 builder.Services.AddAdminAuthentication();
+
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Application use cases.
+builder.Services.AddScoped<PreviewFareMatrix>();
+builder.Services.AddScoped<UploadFareMatrix>();
+builder.Services.AddScoped<ListFareMatrixVersions>();
 
 var app = builder.Build();
 

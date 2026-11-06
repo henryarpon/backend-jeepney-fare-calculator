@@ -1,3 +1,4 @@
+using JeepneyFareCalculator.Application.FareMatrices;
 using JeepneyFareCalculator.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -23,6 +24,8 @@ public static class DependencyInjection
 
             options.UseSqlServer(connectionString);
         });
+
+        services.AddScoped<IFareMatrixStore, FareMatrixStore>();
 
         services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("database");
