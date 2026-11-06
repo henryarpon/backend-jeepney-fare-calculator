@@ -16,7 +16,10 @@ public sealed class FareMatricesController(
     ListFareMatrixVersions listFareMatrixVersions,
     ILogger<FareMatricesController> logger) : ControllerBase
 {
-    /// <summary>Returns the rows of an uploaded CSV without saving anything.</summary>
+    /// <summary>
+    /// Returns the rows of an uploaded CSV without saving anything. An invalid file
+    /// is answered with 400 ProblemDetails listing every error (<see cref="InvalidFareMatrixFileHandler"/>).
+    /// </summary>
     [HttpPost("preview")]
     public async Task<ActionResult<FareMatrixPreview>> PreviewAsync(
         [FromForm] FareMatrixFileForm form,
@@ -29,7 +32,8 @@ public sealed class FareMatricesController(
     /// <summary>
     /// Saves an uploaded CSV as a new Fare Matrix Version and makes it the vehicle
     /// type's Active Fare Matrix. The file is sent again after the preview: the
-    /// server keeps no draft in between.
+    /// server keeps no draft in between. An invalid file is rejected with 400 like
+    /// the preview, and nothing is saved.
     /// </summary>
     [HttpPost]
     public async Task<ActionResult<FareMatrixVersionSummary>> UploadAsync(
