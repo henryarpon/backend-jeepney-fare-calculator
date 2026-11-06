@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/JeepneyFareCalculator.Api/JeepneyFareCalculator.Api.csproj" />
+    <Project Path="src/JeepneyFareCalculator.Application/JeepneyFareCalculator.Application.csproj" />
+    <Project Path="src/JeepneyFareCalculator.Domain/JeepneyFareCalculator.Domain.csproj" />
+    <Project Path="src/JeepneyFareCalculator.Infrastructure/JeepneyFareCalculator.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/JeepneyFareCalculator.Api.Tests/JeepneyFareCalculator.Api.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,6 +1,0 @@
-@jeepney_fare_calculator_HostAddress = http://localhost:5007
-
-GET {{jeepney_fare_calculator_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
