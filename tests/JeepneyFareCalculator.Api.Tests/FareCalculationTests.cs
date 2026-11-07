@@ -179,6 +179,57 @@ public sealed class FareCalculationTests(ApiFactory factory)
         Assert.NotEmpty(problem?.Errors ?? []);
     }
 
+    public static TheoryData<string, string> InvalidRequestKeys => new()
+    {
+        { Body(vehicleType: "null"), "$.vehicleType" },
+        { Body(origin: "{\"lat\":90.5,\"lng\":121.05}"), "$.origin.lat" },
+        { Body(party: "[{\"passengerType\":\"Regular\"}]"), "$.party[0].count" },
+        { Body(party: "[{\"passengerType\":\"Regular\",\"count\":31}]"), "$.party" },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidRequestKeys))]
+    public async Task Calculate_InvalidRequest_KeysErrorsByJsonPath(string body, string expectedKey)
+    {
+        var response = await factory.CreateClient().PostAsync(
+            "/api/fares/calculate",
+            new StringContent(body, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemBody>();
+        Assert.NotNull(problem);
+        Assert.Contains(expectedKey, problem.Errors.Keys);
+    }
+
+    [Fact]
+    public async Task Calculate_EntriesMissingPassengerType_AreNotReportedAsListedTwice()
+    {
+        var response = await factory.CreateClient().PostAsync(
+            "/api/fares/calculate",
+            new StringContent(Body(party: "[{\"count\":1},{\"count\":1}]"), Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ValidationProblemBody>();
+        var messages = problem?.Errors.Values.SelectMany(errors => errors).ToList() ?? [];
+        Assert.Contains("The passenger type is missing.", messages);
+        Assert.DoesNotContain(messages, message => message.Contains("more than once"));
+    }
+
+    [Fact]
+    public async Task Calculate_SameOriginAndDestination_IsNotPriced()
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(0.0m);
+        var samePoint = "{\"lat\":14.6191,\"lng\":121.0510}";
+
+        var response = await factory.CreateClient().PostAsync(
+            "/api/fares/calculate",
+            new StringContent(Body(origin: samePoint, destination: samePoint), Encoding.UTF8, "application/json"));
+
+        // The exact status (422) is ticket #8's job; what matters here is that no fare is given.
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
     /// <summary>A valid request body as raw JSON, with one part replaced to make it invalid.</summary>
     private static string Body(
         string vehicleType = "\"TraditionalJeepney\"",

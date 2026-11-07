@@ -1,7 +1,10 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using JeepneyFareCalculator.Application.Distances;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace JeepneyFareCalculator.Infrastructure.Routing;
 
@@ -10,7 +13,16 @@ namespace JeepneyFareCalculator.Infrastructure.Routing;
 /// profile, avoiding highways and tollways, since jeepneys use ordinary roads.
 /// The API key is <c>OpenRouteService:ApiKey</c>, from user-secrets in development.
 /// </summary>
-public sealed class OpenRouteServiceDistanceEstimator(HttpClient httpClient, IConfiguration configuration)
+/// <remarks>
+/// OpenRouteService reports "no route" as 404 (error codes 2009 and 2010), and an
+/// exhausted quota, a bad key or an outage as other error statuses. These become
+/// <see cref="DistanceEstimate.NoRoute"/> and <see cref="DistanceEstimate.ProviderUnavailable"/>
+/// rather than exceptions, so the caller can tell the commuter what happened.
+/// </remarks>
+public sealed class OpenRouteServiceDistanceEstimator(
+    HttpClient httpClient,
+    IConfiguration configuration,
+    ILogger<OpenRouteServiceDistanceEstimator> logger)
     : IDistanceEstimator
 {
     public const string BaseAddress = "https://api.openrouteservice.org/";
@@ -41,19 +53,50 @@ public sealed class OpenRouteServiceDistanceEstimator(HttpClient httpClient, ICo
         };
         request.Headers.TryAddWithoutValidation("Authorization", apiKey);
 
-        using var response = await httpClient.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
-
-        var directions = await response.Content.ReadFromJsonAsync<DirectionsResponse>(cancellationToken);
-        var route = directions?.Routes?.FirstOrDefault();
-        if (route is null)
+        try
         {
-            return DistanceEstimate.NoRoute;
-        }
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                return DistanceEstimate.NoRoute;
+            }
 
-        // The summary leaves the distance out when the route has no length.
-        var distanceMeters = route.Summary?.Distance ?? 0;
-        return DistanceEstimate.Found((decimal)distanceMeters / 1000m);
+            if (!response.IsSuccessStatusCode)
+            {
+                // 401/403 also cover a wrong key, so log the status to tell that apart from an outage.
+                logger.LogWarning("OpenRouteService answered {StatusCode}.", (int)response.StatusCode);
+                return DistanceEstimate.ProviderUnavailable;
+            }
+
+            var directions = await response.Content.ReadFromJsonAsync<DirectionsResponse>(cancellationToken);
+            var route = directions?.Routes?.FirstOrDefault();
+            if (route is null)
+            {
+                return DistanceEstimate.NoRoute;
+            }
+
+            // The summary leaves the distance out when the route has no length: both
+            // points snap to the same spot on the road. That is charged as the shortest
+            // trip. Identical Origin and Destination never get here (CalculateFare).
+            var distanceMeters = route.Summary?.Distance ?? 0;
+            return DistanceEstimate.Found((decimal)distanceMeters / 1000m);
+        }
+        catch (HttpRequestException exception)
+        {
+            logger.LogWarning(exception, "OpenRouteService could not be reached.");
+            return DistanceEstimate.ProviderUnavailable;
+        }
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // HttpClient.Timeout ran out; the commuter did not cancel.
+            logger.LogWarning(exception, "OpenRouteService timed out.");
+            return DistanceEstimate.ProviderUnavailable;
+        }
+        catch (JsonException exception)
+        {
+            logger.LogWarning(exception, "OpenRouteService sent a response that could not be read.");
+            return DistanceEstimate.ProviderUnavailable;
+        }
     }
 
     private sealed record DirectionsRequest(

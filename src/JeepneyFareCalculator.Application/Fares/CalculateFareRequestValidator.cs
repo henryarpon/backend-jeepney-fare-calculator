@@ -30,13 +30,24 @@ public sealed class CalculateFareRequestValidator : AbstractValidator<CalculateF
             .NotNull().WithMessage("A party entry is missing.")
             .SetValidator(new PartyMemberValidator());
 
+        // The Party's own rules (each type once, 0 to 30 each, 1 to 30 in total) live
+        // in the Domain. They are checked once every entry has a known type and a count.
         RuleFor(request => request.Party)
-            .Must(party => party!.Select(member => member?.PassengerType).Distinct().Count() == party!.Count)
-            .WithMessage("List each passenger type only once.")
-            .Must(party => party!.Sum(member => member?.Count ?? 0) is >= Party.MinPassengers and <= Party.MaxPassengers)
-            .WithMessage($"The party must have {Party.MinPassengers} to {Party.MaxPassengers} passengers in total.")
-            .When(request => request.Party is not null);
+            .Custom((party, context) =>
+            {
+                foreach (var violation in Party.FindViolations(ToCounts(party!)))
+                {
+                    context.AddFailure(violation);
+                }
+            })
+            .When(request => request.Party is not null && request.Party.All(IsComplete));
     }
+
+    private static bool IsComplete(PartyMemberDto? member) =>
+        member is { PassengerType: { } passengerType, Count: not null } && Enum.IsDefined(passengerType);
+
+    private static List<(PassengerType PassengerType, int Count)> ToCounts(IReadOnlyList<PartyMemberDto> party) =>
+        party.Select(member => (member.PassengerType!.Value, member.Count!.Value)).ToList();
 
     private sealed class CoordinatesValidator : AbstractValidator<CoordinatesDto>
     {
@@ -61,9 +72,7 @@ public sealed class CalculateFareRequestValidator : AbstractValidator<CalculateF
                 .IsInEnum().WithMessage("The passenger type must be Regular, Student, SeniorCitizen or Pwd.");
 
             RuleFor(member => member.Count)
-                .NotNull().WithMessage("The count is missing.")
-                .InclusiveBetween(0, Party.MaxPerPassengerType)
-                .WithMessage($"Each passenger type can have 0 to {Party.MaxPerPassengerType} passengers.");
+                .NotNull().WithMessage("The count is missing.");
         }
     }
 }

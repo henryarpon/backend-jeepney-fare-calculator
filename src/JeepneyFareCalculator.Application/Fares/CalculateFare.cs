@@ -26,10 +26,16 @@ public sealed class CalculateFare(
         var activeFareMatrix = await fareMatrixStore.GetActiveAsync(request.VehicleType!.Value, cancellationToken)
             ?? throw new InvalidOperationException($"{request.VehicleType} has no Active Fare Matrix.");
 
-        var estimate = await distanceEstimator.EstimateAsync(
-            ToCoordinates(request.Origin!),
-            ToCoordinates(request.Destination!),
-            cancellationToken);
+        // The routing provider would answer a zero-length route, which would be
+        // priced as the shortest trip. The spec rejects it instead (422 is #8's job).
+        var origin = ToCoordinates(request.Origin!);
+        var destination = ToCoordinates(request.Destination!);
+        if (origin == destination)
+        {
+            throw new InvalidOperationException("The Origin and Destination are the same point.");
+        }
+
+        var estimate = await distanceEstimator.EstimateAsync(origin, destination, cancellationToken);
         if (estimate.EstimatedDistanceKm is not { } estimatedDistanceKm)
         {
             throw new InvalidOperationException($"The distance could not be estimated: {estimate.Outcome}.");

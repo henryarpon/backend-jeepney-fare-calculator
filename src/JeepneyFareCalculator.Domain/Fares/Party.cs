@@ -18,29 +18,48 @@ public sealed class Party
     /// </exception>
     public Party(IEnumerable<(PassengerType PassengerType, int Count)> counts)
     {
-        var byType = new Dictionary<PassengerType, int>();
-        foreach (var (passengerType, count) in counts)
+        var list = counts.ToList();
+        var violations = FindViolations(list);
+        if (violations.Count > 0)
         {
-            if (!byType.TryAdd(passengerType, count))
-            {
-                throw new ArgumentException($"{passengerType} appears more than once.", nameof(counts));
-            }
-
-            if (count is < 0 or > MaxPerPassengerType)
-            {
-                throw new ArgumentException(
-                    $"{passengerType} has {count} passengers; each type has 0 to {MaxPerPassengerType}.", nameof(counts));
-            }
+            throw new ArgumentException(string.Join(" ", violations), nameof(counts));
         }
 
-        var total = byType.Values.Sum();
+        _counts = list.ToDictionary(entry => entry.PassengerType, entry => entry.Count);
+    }
+
+    /// <summary>
+    /// Every rule the counts break, as messages for the commuter; empty when they make a valid Party.
+    /// The request validator reports these too, so the rules live only here.
+    /// </summary>
+    public static IReadOnlyList<string> FindViolations(IReadOnlyCollection<(PassengerType PassengerType, int Count)> counts)
+    {
+        var violations = new List<string>();
+
+        var listedTwice = counts
+            .GroupBy(entry => entry.PassengerType)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key);
+        foreach (var passengerType in listedTwice)
+        {
+            violations.Add($"{passengerType} is listed more than once. List each passenger type only once.");
+        }
+
+        foreach (var (passengerType, count) in counts.Where(entry => entry.Count is < 0 or > MaxPerPassengerType))
+        {
+            violations.Add(
+                $"{passengerType} has {count} passengers. Each passenger type can have 0 to {MaxPerPassengerType} passengers.");
+        }
+
+        // Summed as long so that huge counts are reported, not overflowed.
+        var total = counts.Sum(entry => (long)entry.Count);
         if (total is < MinPassengers or > MaxPassengers)
         {
-            throw new ArgumentException(
-                $"The party has {total} passengers; it must have {MinPassengers} to {MaxPassengers}.", nameof(counts));
+            violations.Add(
+                $"The party has {total} passengers in total. It must have {MinPassengers} to {MaxPassengers}.");
         }
 
-        _counts = byType;
+        return violations;
     }
 
     /// <summary>The passenger types with at least one passenger, in <see cref="PassengerType"/> order.</summary>
