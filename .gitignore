@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Local secrets (e.g. OpenRouteService:ApiKey), loaded in Development only
+appsettings.Local.json
+
 # User-specific files
 *.rsuser
 *.suo

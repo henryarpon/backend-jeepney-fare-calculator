@@ -17,7 +17,7 @@ public sealed class AdministratorSignIn(AdministratorSettings settings)
         {
             throw new InvalidOperationException(
                 $"The Administrator is not configured. Set '{AdministratorSettings.SectionName}:Username' and " +
-                $"'{AdministratorSettings.SectionName}:PasswordHash' with dotnet user-secrets (see back-end/CLAUDE.md).");
+                $"'{AdministratorSettings.SectionName}:PasswordHash' in appsettings.Local.json (see back-end/CLAUDE.md).");
         }
 
         // Both checks always run, so a wrong username takes as long to reject as a wrong password.

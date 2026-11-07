@@ -16,6 +16,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Holds local secrets: never copy it into a published build. -->
+    <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\JeepneyFareCalculator.Application\JeepneyFareCalculator.Application.csproj" />
     <ProjectReference Include="..\JeepneyFareCalculator.Infrastructure\JeepneyFareCalculator.Infrastructure.csproj" />
   </ItemGroup>
