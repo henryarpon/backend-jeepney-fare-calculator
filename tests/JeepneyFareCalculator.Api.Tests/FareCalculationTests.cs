@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -216,18 +217,111 @@ public sealed class FareCalculationTests(ApiFactory factory)
     }
 
     [Fact]
-    public async Task Calculate_SameOriginAndDestination_IsNotPriced()
+    public async Task Calculate_SameOriginAndDestination_Returns422WithSamePointReason()
     {
         await UploadSampleMatrixAsync("TraditionalJeepney");
         factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(0.0m);
         var samePoint = "{\"lat\":14.6191,\"lng\":121.0510}";
 
+        var problem = await NotPricedAsync(Body(origin: samePoint, destination: samePoint));
+
+        Assert.Equal("SamePoint", problem.Reason);
+    }
+
+    [Fact]
+    public async Task Calculate_NoRoadRoute_Returns422WithNoRouteReason()
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.NoRoute;
+
+        var problem = await NotPricedAsync(Body());
+
+        Assert.Equal("NoRoute", problem.Reason);
+    }
+
+    [Fact]
+    public async Task Calculate_ChargedDistanceBeyondLastRow_Returns422WithTheMaximumKm()
+    {
+        // The sample matrix's last row is 7 km; 7.1 km is charged as 8 km.
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(7.1m);
+
+        var problem = await NotPricedAsync(Body());
+
+        Assert.Equal("BeyondFareMatrix", problem.Reason);
+        Assert.Equal(7, problem.MaxDistanceKm);
+        Assert.Contains("7 km", problem.Detail);
+    }
+
+    public static TheoryData<string, string> PointsOutsideThePhilippines => new()
+    {
+        { "origin in Singapore", Body(origin: "{\"lat\":1.2903,\"lng\":103.8520}") },
+        { "destination in Tokyo", Body(destination: "{\"lat\":35.6812,\"lng\":139.7671}") },
+    };
+
+    [Theory]
+    [MemberData(nameof(PointsOutsideThePhilippines))]
+    public async Task Calculate_PointOutsideThePhilippines_Returns422WithOutsidePhilippinesReason(
+        string scenario,
+        string body)
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(5.0m);
+
+        var problem = await NotPricedAsync(body);
+
+        Assert.True(problem.Reason == "OutsidePhilippines", $"{scenario}: got {problem.Reason}");
+    }
+
+    [Theory]
+    [InlineData(20.4486, 121.9702)] // Basco, Batanes, in the far north
+    [InlineData(5.0294, 119.7736)] // Bongao, Tawi-Tawi, in the far south-west
+    public async Task Calculate_PointNearTheEdgeOfThePhilippines_IsPriced(double lat, double lng)
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(5.0m);
+        // Invariant culture, so the JSON has "20.4486" even where the decimal separator is a comma.
+        var origin = string.Create(CultureInfo.InvariantCulture, $"{{\"lat\":{lat},\"lng\":{lng}}}");
+        var destination = string.Create(CultureInfo.InvariantCulture, $"{{\"lat\":{lat + 0.01},\"lng\":{lng}}}");
+        var body = Body(origin: origin, destination: destination);
+
         var response = await factory.CreateClient().PostAsync(
             "/api/fares/calculate",
-            new StringContent(Body(origin: samePoint, destination: samePoint), Encoding.UTF8, "application/json"));
+            new StringContent(body, Encoding.UTF8, "application/json"));
 
-        // The exact status (422) is ticket #8's job; what matters here is that no fare is given.
-        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Calculate_RoutingProviderUnavailable_Returns503WithoutAFare()
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.ProviderUnavailable;
+
+        var response = await factory.CreateClient().PostAsync(
+            "/api/fares/calculate",
+            new StringContent(Body(), Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<NotPricedProblemBody>();
+        Assert.Equal(503, problem?.Status);
+        Assert.Equal("Couldn't estimate the distance right now, please try again.", problem?.Detail);
+    }
+
+    /// <summary>Posts the body, checks it was answered with 422 ProblemDetails, and returns the problem.</summary>
+    private async Task<NotPricedProblemBody> NotPricedAsync(string body)
+    {
+        var response = await factory.CreateClient().PostAsync(
+            "/api/fares/calculate",
+            new StringContent(body, Encoding.UTF8, "application/json"));
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = (await response.Content.ReadFromJsonAsync<NotPricedProblemBody>())!;
+        Assert.Equal(422, problem.Status);
+        Assert.False(string.IsNullOrWhiteSpace(problem.Detail), "The problem has no human-readable message.");
+        return problem;
     }
 
     /// <summary>A valid request body as raw JSON, with one part replaced to make it invalid.</summary>
@@ -294,6 +388,8 @@ public sealed class FareCalculationTests(ApiFactory factory)
     private sealed record RowBody(int DistanceKm, decimal RegularFare, decimal DiscountedFare);
 
     private sealed record ValidationProblemBody(int Status, Dictionary<string, string[]> Errors);
+
+    private sealed record NotPricedProblemBody(int Status, string? Detail, string? Reason, int? MaxDistanceKm);
 
     private sealed record BreakdownBody(
         decimal EstimatedDistanceKm,

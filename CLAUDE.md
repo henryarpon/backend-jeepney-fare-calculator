@@ -63,7 +63,7 @@ Domain never references any other project. Never reference Infrastructure from A
 - Admin sessions are kept in memory (`Api/Authentication/InMemoryTicketStore`), so restarting the API signs the Administrator out. A session ends after 2 hours without a request.
 - Admin endpoints need `[Authorize]` on their controller. Integration tests sign in with `factory.CreateSignedInClientAsync()`, which goes through the real login endpoint over https (the cookie is Secure).
 - Integration tests need LocalDB (`(localdb)\MSSQLLocalDB`). Each test run creates a database named `JeepneyFareCalculator_Tests_<guid>` and drops it at the end. If a run is killed, delete leftovers in SQL Server Object Explorer.
-- Integration test classes must have `[Collection(ApiCollection.Name)]` so they share one `ApiFactory` and one database. Tests in that collection run one at a time.
+- Integration test classes must have `[Collection(ApiCollection.Name)]` so they share one `ApiFactory` and one database. Tests in that collection run one at a time. The one exception is `NoActiveFareMatrixTests`, which needs a database where nothing was ever uploaded, so it has its own `ApiFactory` (`IClassFixture`) and must never upload a fare matrix. It is in `NoActiveFareMatrixCollection`, which runs on its own so two hosts never run at once.
 - The `FakeDistanceEstimator` is shared too: a test that depends on the estimated distance must set `factory.DistanceEstimator.NextEstimate` itself, never rely on what an earlier test left there.
 - Tests run in the `Testing` environment, so user-secrets and `appsettings.Development.json` are not loaded.
 - No CORS: in development the Angular dev server proxies `/api` to https://localhost:7227, so the browser sees one origin.
