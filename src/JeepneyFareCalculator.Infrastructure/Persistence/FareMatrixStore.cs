@@ -106,6 +106,28 @@ public sealed class FareMatrixStore(AppDbContext dbContext) : IFareMatrixStore
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<ActiveFareMatrix?> GetActiveAsync(VehicleType vehicleType, CancellationToken cancellationToken)
+    {
+        var version = await dbContext.FareMatrixVersions
+            .AsNoTracking()
+            .Where(v => v.VehicleType == vehicleType && v.IsActive)
+            .Select(v => new
+            {
+                Info = new FareMatrixVersionInfo(v.Id, v.UploadedAt, v.Note),
+                Rows = v.Rows
+                    .OrderBy(r => r.DistanceKm)
+                    .Select(r => new FareMatrixRow(r.DistanceKm, r.RegularFare, r.DiscountedFare))
+                    .ToList(),
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        // The rows were validated when they were uploaded, so building the matrix
+        // again can only fail if the database was changed by hand.
+        return version is null
+            ? null
+            : new ActiveFareMatrix(version.Info, new FareMatrix(vehicleType, version.Rows));
+    }
+
     /// <summary>
     /// Deactivates the vehicle type's active version, if it has one. Run it before
     /// activating another version: the unique index allows only one active version
