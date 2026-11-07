@@ -30,4 +30,7 @@ public interface IFareMatrixStore
 
     /// <summary>One version with its rows in distance order, or <c>null</c> when no version has this id.</summary>
     Task<FareMatrixVersionDetails?> GetVersionAsync(int id, CancellationToken cancellationToken);
+
+    /// <summary>The vehicle type's Active Fare Matrix, or <c>null</c> when it has none yet.</summary>
+    Task<ActiveFareMatrix?> GetActiveAsync(VehicleType vehicleType, CancellationToken cancellationToken);
 }

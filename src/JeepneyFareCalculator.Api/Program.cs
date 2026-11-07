@@ -1,7 +1,9 @@
 using JeepneyFareCalculator.Api;
 using System.Text.Json.Serialization;
 using JeepneyFareCalculator.Api.Authentication;
+using FluentValidation;
 using JeepneyFareCalculator.Application.FareMatrices;
+using JeepneyFareCalculator.Application.Fares;
 using JeepneyFareCalculator.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
@@ -25,6 +27,9 @@ builder.Services.AddProblemDetails();
 // A rejected fare matrix file is answered with 400 and its errors, not 500.
 builder.Services.AddExceptionHandler<InvalidFareMatrixFileHandler>();
 
+// A request that fails Application validation is answered with 400 and its errors, not 500.
+builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
+
 builder.Services.AddInfrastructure();
 builder.Services.AddAdminAuthentication();
 
@@ -36,6 +41,8 @@ builder.Services.AddScoped<UploadFareMatrix>();
 builder.Services.AddScoped<ListFareMatrixVersions>();
 builder.Services.AddScoped<GetFareMatrixVersion>();
 builder.Services.AddScoped<ActivateFareMatrixVersion>();
+builder.Services.AddScoped<CalculateFare>();
+builder.Services.AddSingleton<IValidator<CalculateFareRequest>, CalculateFareRequestValidator>();
 
 var app = builder.Build();
 

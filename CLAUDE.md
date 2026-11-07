@@ -58,6 +58,8 @@ Domain never references any other project. Never reference Infrastructure from A
   2. `dotnet user-secrets set "Administrator:Username" "<username>" --project src/JeepneyFareCalculator.Api`
   3. `dotnet user-secrets set "Administrator:PasswordHash" "<hash from step 1>" --project src/JeepneyFareCalculator.Api`
   Only the hash is stored, never the password. Restart the API after changing them.
+- Fare calculation estimates distances with OpenRouteService, using `OpenRouteService:ApiKey` from user-secrets (Api project). Until it is set, `POST /api/fares/calculate` returns 500 for a valid request. Get a free key at openrouteservice.org, then from `back-end/`:
+  `dotnet user-secrets set "OpenRouteService:ApiKey" "<key>" --project src/JeepneyFareCalculator.Api`
 - Admin sessions are kept in memory (`Api/Authentication/InMemoryTicketStore`), so restarting the API signs the Administrator out. A session ends after 2 hours without a request.
 - Admin endpoints need `[Authorize]` on their controller. Integration tests sign in with `factory.CreateSignedInClientAsync()`, which goes through the real login endpoint over https (the cookie is Secure).
 - Integration tests need LocalDB (`(localdb)\MSSQLLocalDB`). Each test run creates a database named `JeepneyFareCalculator_Tests_<guid>` and drops it at the end. If a run is killed, delete leftovers in SQL Server Object Explorer.

@@ -1,5 +1,7 @@
+using JeepneyFareCalculator.Application.Distances;
 using JeepneyFareCalculator.Application.FareMatrices;
 using JeepneyFareCalculator.Infrastructure.Persistence;
+using JeepneyFareCalculator.Infrastructure.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,6 +28,13 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IFareMatrixStore, FareMatrixStore>();
+
+        services.AddHttpClient<IDistanceEstimator, OpenRouteServiceDistanceEstimator>(client =>
+        {
+            client.BaseAddress = new Uri(OpenRouteServiceDistanceEstimator.BaseAddress);
+            // A commuter is waiting at the curb, so don't hang on a slow provider.
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
 
         services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("database");
