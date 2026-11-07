@@ -15,6 +15,13 @@ if (args is [HashPasswordCommand.Name])
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Local secrets such as OpenRouteService:ApiKey, in a git-ignored file next to
+// appsettings.json. Optional, so the API still starts without it.
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+}
+
 // Enums such as VehicleType are read and written by name ("TraditionalJeepney"), never as numbers.
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
