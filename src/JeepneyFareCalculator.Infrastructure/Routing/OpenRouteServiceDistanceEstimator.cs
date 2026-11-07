@@ -11,7 +11,8 @@ namespace JeepneyFareCalculator.Infrastructure.Routing;
 /// <summary>
 /// Estimates road distances with the OpenRouteService directions API: the driving
 /// profile, avoiding highways and tollways, since jeepneys use ordinary roads.
-/// The API key is <c>OpenRouteService:ApiKey</c>, from user-secrets in development.
+/// The API key is <c>OpenRouteService:ApiKey</c>, from the git-ignored
+/// <c>appsettings.Local.json</c> in development.
 /// </summary>
 /// <remarks>
 /// OpenRouteService reports "no route" as 404 (error codes 2009 and 2010), and an
@@ -39,7 +40,7 @@ public sealed class OpenRouteServiceDistanceEstimator(
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             throw new InvalidOperationException(
-                $"'{ApiKeySetting}' is not configured. In development, set it with dotnet user-secrets (see back-end/CLAUDE.md).");
+                $"'{ApiKeySetting}' is not configured. In development, set it in appsettings.Local.json (see back-end/CLAUDE.md).");
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "v2/directions/driving-car")
