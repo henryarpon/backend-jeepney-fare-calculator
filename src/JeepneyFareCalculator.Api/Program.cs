@@ -30,6 +30,12 @@ builder.Services.AddExceptionHandler<InvalidFareMatrixFileHandler>();
 // A request that fails Application validation is answered with 400 and its errors, not 500.
 builder.Services.AddExceptionHandler<ValidationExceptionHandler>();
 
+// A trip that can't be priced is answered with 422 and the reason, not 500.
+builder.Services.AddExceptionHandler<TripNotPricedHandler>();
+
+// A distance the routing provider couldn't estimate is answered with 503, not 500.
+builder.Services.AddExceptionHandler<DistanceUnavailableHandler>();
+
 builder.Services.AddInfrastructure();
 builder.Services.AddAdminAuthentication();
 
