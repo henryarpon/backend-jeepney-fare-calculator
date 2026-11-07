@@ -68,7 +68,7 @@ public sealed class CalculateFare(
                 TripDistance.FromEstimate(estimatedDistanceKm),
                 party);
 
-            return FareBreakdownDto.From(breakdown, activeFareMatrix.Version);
+            return FareBreakdownDto.From(breakdown, activeFareMatrix.Version, estimate.RouteLine);
         }
         catch (ChargedDistanceBeyondFareMatrixException beyond)
         {

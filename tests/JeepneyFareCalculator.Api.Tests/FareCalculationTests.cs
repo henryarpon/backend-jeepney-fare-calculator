@@ -136,6 +136,21 @@ public sealed class FareCalculationTests(ApiFactory factory)
     }
 
     [Fact]
+    public async Task Calculate_AnyTrip_ReturnsTheRouteLineTheDistanceWasMeasuredAlong()
+    {
+        await UploadSampleMatrixAsync("TraditionalJeepney");
+        factory.DistanceEstimator.NextEstimate = DistanceEstimate.Found(
+            5.0m,
+            [new Coordinates(14.6191, 121.0510), new Coordinates(14.6100, 121.0200), new Coordinates(14.5995, 120.9842)]);
+
+        var breakdown = await CalculateAsync(Request("TraditionalJeepney", ("Regular", 1)));
+
+        Assert.Equal(
+            [new PointBody(14.6191, 121.0510), new PointBody(14.6100, 121.0200), new PointBody(14.5995, 120.9842)],
+            breakdown.RouteLine);
+    }
+
+    [Fact]
     public async Task Calculate_ActiveMatrixChanged_UsesTheNewActiveVersion()
     {
         await UploadSampleMatrixAsync("TraditionalJeepney", note: "older");
@@ -391,11 +406,14 @@ public sealed class FareCalculationTests(ApiFactory factory)
 
     private sealed record NotPricedProblemBody(int Status, string? Detail, string? Reason, int? MaxDistanceKm);
 
+    private sealed record PointBody(double Lat, double Lng);
+
     private sealed record BreakdownBody(
         decimal EstimatedDistanceKm,
         int ChargedDistanceKm,
         List<LineBody> Lines,
         decimal TotalFare,
         VersionBody FareMatrixVersion,
-        List<RowBody> MatrixExcerpt);
+        List<RowBody> MatrixExcerpt,
+        List<PointBody> RouteLine);
 }

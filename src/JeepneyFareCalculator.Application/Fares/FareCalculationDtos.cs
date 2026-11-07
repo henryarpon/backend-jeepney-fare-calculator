@@ -1,3 +1,4 @@
+using JeepneyFareCalculator.Application.Distances;
 using JeepneyFareCalculator.Application.FareMatrices;
 using JeepneyFareCalculator.Domain.FareMatrices;
 using JeepneyFareCalculator.Domain.Fares;
@@ -26,15 +27,23 @@ public sealed record PartyMemberDto(PassengerType? PassengerType, int? Count);
 /// <param name="ChargedDistanceKm">The Charged Distance in whole km.</param>
 /// <param name="Lines">One line per passenger type with at least one passenger, Regular first.</param>
 /// <param name="MatrixExcerpt">The charged row with the row before and after it, where the matrix has them.</param>
+/// <param name="RouteLine">
+/// The road path the Estimated Distance was measured along, from the Origin to the
+/// Destination, as returned by the routing provider. The front end draws it on the map.
+/// </param>
 public sealed record FareBreakdownDto(
     decimal EstimatedDistanceKm,
     int ChargedDistanceKm,
     IReadOnlyList<FareLineDto> Lines,
     decimal TotalFare,
     FareMatrixVersionInfo FareMatrixVersion,
-    IReadOnlyList<FareMatrixRowDto> MatrixExcerpt)
+    IReadOnlyList<FareMatrixRowDto> MatrixExcerpt,
+    IReadOnlyList<RoutePointDto> RouteLine)
 {
-    public static FareBreakdownDto From(FareBreakdown breakdown, FareMatrixVersionInfo version) => new(
+    public static FareBreakdownDto From(
+        FareBreakdown breakdown,
+        FareMatrixVersionInfo version,
+        IReadOnlyList<Coordinates> routeLine) => new(
         breakdown.Distance.EstimatedKm,
         breakdown.Distance.ChargedKm,
         breakdown.Lines
@@ -48,8 +57,12 @@ public sealed record FareBreakdownDto(
             .ToList(),
         breakdown.TotalFare,
         version,
-        breakdown.MatrixExcerpt.Select(FareMatrixRowDto.From).ToList());
+        breakdown.MatrixExcerpt.Select(FareMatrixRowDto.From).ToList(),
+        routeLine.Select(point => new RoutePointDto(point.Latitude, point.Longitude)).ToList());
 }
+
+/// <summary>One point of the route line, in decimal degrees.</summary>
+public sealed record RoutePointDto(double Lat, double Lng);
 
 /// <summary>One passenger type's share of the Total Fare.</summary>
 public sealed record FareLineDto(
