@@ -1,6 +1,7 @@
 using JeepneyFareCalculator.Api;
 using System.Text.Json.Serialization;
 using JeepneyFareCalculator.Api.Authentication;
+using JeepneyFareCalculator.Api.RateLimiting;
 using FluentValidation;
 using JeepneyFareCalculator.Application.FareMatrices;
 using JeepneyFareCalculator.Application.Fares;
@@ -46,6 +47,9 @@ builder.Services.AddExceptionHandler<DistanceUnavailableHandler>();
 builder.Services.AddInfrastructure();
 builder.Services.AddAdminAuthentication();
 
+// Limits fare calculations per client, to protect the routing quota.
+builder.Services.AddCalculateRateLimiting();
+
 builder.Services.AddSingleton(TimeProvider.System);
 
 // Application use cases.
@@ -71,6 +75,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHealthChecks("/api/health", new HealthCheckOptions

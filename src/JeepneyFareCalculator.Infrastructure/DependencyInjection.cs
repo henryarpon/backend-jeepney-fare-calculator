@@ -29,12 +29,19 @@ public static class DependencyInjection
 
         services.AddScoped<IFareMatrixStore, FareMatrixStore>();
 
-        services.AddHttpClient<IDistanceEstimator, OpenRouteServiceDistanceEstimator>(client =>
+        // The routing provider sits behind a cache, so a repeated trip doesn't use up
+        // its free quota. Everything else asks for IDistanceEstimator and gets the cache.
+        services.AddMemoryCache();
+        services.AddHttpClient<OpenRouteServiceDistanceEstimator>(client =>
         {
             client.BaseAddress = new Uri(OpenRouteServiceDistanceEstimator.BaseAddress);
             // A commuter is waiting at the curb, so don't hang on a slow provider.
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+        services.AddKeyedScoped<IDistanceEstimator>(
+            CachingDistanceEstimator.RoutingProviderKey,
+            (serviceProvider, _) => serviceProvider.GetRequiredService<OpenRouteServiceDistanceEstimator>());
+        services.AddScoped<IDistanceEstimator, CachingDistanceEstimator>();
 
         services.AddHealthChecks()
             .AddCheck<DatabaseHealthCheck>("database");
