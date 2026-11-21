@@ -15,10 +15,16 @@ namespace JeepneyFareCalculator.Infrastructure.Routing;
 /// <c>appsettings.Local.json</c> in development.
 /// </summary>
 /// <remarks>
+/// <para>
+/// The GeoJSON flavour of the endpoint is used because it returns the route line as
+/// plain <c>[longitude, latitude]</c> pairs, so no polyline decoding is needed.
+/// </para>
+/// <para>
 /// OpenRouteService reports "no route" as 404 (error codes 2009 and 2010), and an
 /// exhausted quota, a bad key or an outage as other error statuses. These become
 /// <see cref="DistanceEstimate.NoRoute"/> and <see cref="DistanceEstimate.ProviderUnavailable"/>
 /// rather than exceptions, so the caller can tell the commuter what happened.
+/// </para>
 /// </remarks>
 public sealed class OpenRouteServiceDistanceEstimator(
     HttpClient httpClient,
@@ -43,14 +49,13 @@ public sealed class OpenRouteServiceDistanceEstimator(
                 $"'{ApiKeySetting}' is not configured. In development, set it in appsettings.Local.json (see back-end/CLAUDE.md).");
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "v2/directions/driving-car")
+        using var request = new HttpRequestMessage(HttpMethod.Post, "v2/directions/driving-car/geojson")
         {
             // OpenRouteService takes coordinates as [longitude, latitude].
             Content = JsonContent.Create(new DirectionsRequest(
                 [[origin.Longitude, origin.Latitude], [destination.Longitude, destination.Latitude]],
                 new DirectionsOptions(["highways", "tollways"]),
-                Instructions: false,
-                Geometry: false)),
+                Instructions: false)),
         };
         request.Headers.TryAddWithoutValidation("Authorization", apiKey);
 
@@ -70,7 +75,7 @@ public sealed class OpenRouteServiceDistanceEstimator(
             }
 
             var directions = await response.Content.ReadFromJsonAsync<DirectionsResponse>(cancellationToken);
-            var route = directions?.Routes?.FirstOrDefault();
+            var route = directions?.Features?.FirstOrDefault();
             if (route is null)
             {
                 return DistanceEstimate.NoRoute;
@@ -79,8 +84,13 @@ public sealed class OpenRouteServiceDistanceEstimator(
             // The summary leaves the distance out when the route has no length: both
             // points snap to the same spot on the road. That is charged as the shortest
             // trip. Identical Origin and Destination never get here (CalculateFare).
-            var distanceMeters = route.Summary?.Distance ?? 0;
-            return DistanceEstimate.Found((decimal)distanceMeters / 1000m);
+            var distanceMeters = route.Properties?.Summary?.Distance ?? 0;
+            var routeLine = (route.Geometry?.Coordinates ?? [])
+                .Where(position => position.Length >= 2)
+                .Select(position => new Coordinates(Latitude: position[1], Longitude: position[0]))
+                .ToList();
+
+            return DistanceEstimate.Found((decimal)distanceMeters / 1000m, routeLine);
         }
         catch (HttpRequestException exception)
         {
@@ -103,19 +113,27 @@ public sealed class OpenRouteServiceDistanceEstimator(
     private sealed record DirectionsRequest(
         [property: JsonPropertyName("coordinates")] double[][] Coordinates,
         [property: JsonPropertyName("options")] DirectionsOptions Options,
-        [property: JsonPropertyName("instructions")] bool Instructions,
-        [property: JsonPropertyName("geometry")] bool Geometry);
+        [property: JsonPropertyName("instructions")] bool Instructions);
 
     private sealed record DirectionsOptions(
         [property: JsonPropertyName("avoid_features")] string[] AvoidFeatures);
 
+    /// <summary>A GeoJSON FeatureCollection with one Feature per route.</summary>
     private sealed record DirectionsResponse(
-        [property: JsonPropertyName("routes")] List<Route>? Routes);
+        [property: JsonPropertyName("features")] List<RouteFeature>? Features);
 
-    private sealed record Route(
+    private sealed record RouteFeature(
+        [property: JsonPropertyName("properties")] RouteProperties? Properties,
+        [property: JsonPropertyName("geometry")] RouteGeometry? Geometry);
+
+    private sealed record RouteProperties(
         [property: JsonPropertyName("summary")] RouteSummary? Summary);
 
     /// <param name="Distance">The route's length in meters.</param>
     private sealed record RouteSummary(
         [property: JsonPropertyName("distance")] double? Distance);
+
+    /// <param name="Coordinates">A GeoJSON LineString: <c>[longitude, latitude]</c> pairs from Origin to Destination.</param>
+    private sealed record RouteGeometry(
+        [property: JsonPropertyName("coordinates")] double[][]? Coordinates);
 }
