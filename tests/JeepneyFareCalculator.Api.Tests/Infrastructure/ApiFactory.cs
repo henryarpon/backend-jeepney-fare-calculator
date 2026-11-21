@@ -1,8 +1,10 @@
+using System.Net;
 using System.Net.Http.Json;
 using JeepneyFareCalculator.Application.Administrators;
 using JeepneyFareCalculator.Application.Distances;
 using JeepneyFareCalculator.Infrastructure;
 using JeepneyFareCalculator.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -18,8 +20,20 @@ namespace JeepneyFareCalculator.Api.Tests.Infrastructure;
 /// on start-up and dropped when the run ends. The distance estimator is the
 /// only collaborator replaced: tests control it through <see cref="DistanceEstimator"/>.
 /// </summary>
-public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+/// <remarks>
+/// This factory replaces the whole distance estimator, cache included, so a test
+/// always sees the <see cref="FakeDistanceEstimator.NextEstimate"/> it set.
+/// <see cref="RoutingQuotaApiFactory"/> keeps the cache.
+/// </remarks>
+public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    /// <summary>
+    /// The client IP address the API sees for a request, so a test can stay within
+    /// one rate limit window. Without it, every request gets a new address, so
+    /// ordinary tests never hit the calculate rate limit.
+    /// </summary>
+    public const string ClientIpHeader = "X-Test-Client-Ip";
+
     private readonly string _connectionString =
         $@"Server=(localdb)\MSSQLLocalDB;Database=JeepneyFareCalculator_Tests_{Guid.NewGuid():N};" +
         "Trusted_Connection=True;TrustServerCertificate=True";
@@ -68,9 +82,16 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 
         builder.ConfigureTestServices(services =>
         {
-            services.RemoveAll<IDistanceEstimator>();
-            services.AddSingleton<IDistanceEstimator>(DistanceEstimator);
+            services.AddTransient<IStartupFilter, TestClientIpStartupFilter>();
+            UseFakeDistanceEstimator(services);
         });
+    }
+
+    /// <summary>Puts <see cref="DistanceEstimator"/> in place of the real distance estimator.</summary>
+    protected virtual void UseFakeDistanceEstimator(IServiceCollection services)
+    {
+        services.RemoveAll<IDistanceEstimator>();
+        services.AddSingleton<IDistanceEstimator>(DistanceEstimator);
     }
 
     public async Task InitializeAsync()
@@ -89,5 +110,28 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         }
 
         await base.DisposeAsync();
+    }
+
+    /// <summary>
+    /// In-memory requests have no client IP address. This sets one first thing in
+    /// the pipeline, from <see cref="ClientIpHeader"/> or else a new one per request.
+    /// </summary>
+    private sealed class TestClientIpStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+        {
+            return app =>
+            {
+                app.Use((context, nextMiddleware) =>
+                {
+                    context.Connection.RemoteIpAddress =
+                        IPAddress.TryParse(context.Request.Headers[ClientIpHeader], out var clientIp)
+                            ? clientIp
+                            : new IPAddress(Guid.NewGuid().ToByteArray());
+                    return nextMiddleware(context);
+                });
+                next(app);
+            };
+        }
     }
 }
